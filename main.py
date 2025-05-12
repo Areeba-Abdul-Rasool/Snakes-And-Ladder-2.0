@@ -36,6 +36,12 @@ class SnakesLadders:
         elif 250 < x < 420 and 440 < y < 480:
             self.start_game(mode="multi")
 
+    def enable_click_debug(self):
+        self.canvas.bind("<Button-1>", self.print_click_position)
+
+    def print_click_position(self, event):
+        print(f"Mouse clicked at: ({event.x}, {event.y})")
+
     def start_game(self, mode):
         self.canvas.delete("all")
         self.canvas.unbind("<Button-1>")
@@ -46,6 +52,8 @@ class SnakesLadders:
 
         self.players, self.token_ids, self.positions, self.shields, self.names = [], [], [], [], []
 
+        self.mode = mode
+
         if mode == "bot":
             imgs = ["img/player-1.png", "img/botPlayer.png"]
             self.names = ["Player 1", "Bot"]
@@ -54,7 +62,7 @@ class SnakesLadders:
             self.names = ["Player 1", "Player 2", "Player 3"]
 
         for i, img_path in enumerate(imgs):
-            img = ImageTk.PhotoImage(Image.open(img_path).resize((40, 40)))
+            img = ImageTk.PhotoImage(Image.open(img_path).resize((50, 50)))
             token = self.canvas.create_image(20, 720 + i * 40, anchor='nw', image=img)
             self.players.append(img)
             self.token_ids.append(token)
@@ -89,12 +97,18 @@ class SnakesLadders:
 
         self.paused = False
 
+        self.enable_click_debug()
+
+        if self.names[self.turn] == "Bot":
+            self.roll_button.config(state="disabled")
+            self.root.after(1000, self.roll_dice)
+
     def get_tile_xy(self, tile_number):
         if tile_number == 0:
             return 20, 720
         start_x_even = 150
         start_x_odd = 820
-        start_y = 712
+        start_y = 685
         w, h = 71, 72
         row = (tile_number - 1) // 10
         col = (tile_number - 1) % 10
@@ -105,11 +119,27 @@ class SnakesLadders:
     def roll_dice(self):
         if self.paused:
             return
+            
+        current_pos = self.positions[self.turn]
+        weights = [1, 1, 1, 1, 1, 1]
+        
+        if current_pos >= 94:
+            weights[5] += 5
+        elif current_pos >= 80:
+            weights[5] += 3  
+        elif current_pos >= 60:
+            weights[5] += 1  
 
-        value = random.randint(1, 6)
+        total_weight = sum(weights)
+        probabilities = [w / total_weight for w in weights]
+        
+        value = random.choices(range(1, 7), weights=probabilities, k=1)[0]
+
         self.canvas.itemconfig(self.current_dice, image=self.dice_imgs[value - 1])
         playsound("sound/move.wav", block=False)
+        self.roll_button.config(state='disabled')
         threading.Thread(target=self.animate_move, args=(value,), daemon=True).start()
+
 
     def animate_move(self, value):
         current = self.positions[self.turn]
@@ -125,7 +155,6 @@ class SnakesLadders:
         if new_pos in self.ladders:
             playsound("sound/ladder.wav", block=False)
             new_pos = self.ladders[new_pos]
-
         elif new_pos in self.snakes:
             if self.shields[self.turn] > 0:
                 self.shields[self.turn] -= 1
@@ -155,6 +184,12 @@ class SnakesLadders:
         self.turn = (self.turn + 1) % len(self.players)
         self.turn_label.config(text=f"{self.names[self.turn]}'s Turn")
 
+        if self.names[self.turn] == "Bot":
+            self.roll_button.config(state='disabled')
+            self.root.after(1000, self.roll_dice)
+        else:
+            self.roll_button.config(state='normal')
+
     def pause_game(self):
         self.paused = not self.paused
         self.pause_button.config(text="Resume" if self.paused else "Pause")
@@ -162,7 +197,6 @@ class SnakesLadders:
     def restart_game(self):
         self.canvas.delete("all")
         self.select_mode()
-
 
 if __name__ == "__main__":
     root = tk.Tk()
